@@ -157,6 +157,7 @@ AliAnalysisTaskMyTask::AliAnalysisTaskMyTask() : AliAnalysisTaskSE(),
  hCorrectNUAPos       = nullptr;
  hCorrectNUANeg       = nullptr;
 
+  //Plane
  for (int i=0; i<8; ++i) 
  {
   pos2Plane[i]         = nullptr;
@@ -170,6 +171,11 @@ AliAnalysisTaskMyTask::AliAnalysisTaskMyTask() : AliAnalysisTaskSE(),
  {
   arcPos2Plane[i]       = nullptr;
   arcNeg2Plane[i]       = nullptr;
+ }
+  for (int i=0; i<8; ++i) 
+ {
+  negQ[i]       = nullptr;
+  posQ[i]       = nullptr;
  }
  
 
@@ -271,7 +277,8 @@ AliAnalysisTaskMyTask::AliAnalysisTaskMyTask(const char* name) : AliAnalysisTask
 
  hCorrectNUAPos       = nullptr;
  hCorrectNUANeg       = nullptr;
-
+ 
+//Plane
  for (int i=0; i<8; ++i) 
  {
   pos2Plane[i]         = nullptr;
@@ -285,6 +292,11 @@ AliAnalysisTaskMyTask::AliAnalysisTaskMyTask(const char* name) : AliAnalysisTask
  {
   arcPos2Plane[i]       = nullptr;
   arcNeg2Plane[i]       = nullptr;
+ }
+  for (int i=0; i<8; ++i) 
+ {
+  negQ[i]       = nullptr;
+  posQ[i]       = nullptr;
  }
 
   //CME
@@ -355,7 +367,8 @@ void AliAnalysisTaskMyTask::UserCreateOutputObjects()
     fOutputList->SetName(GetName());                                    // at the end of the analysis, the contents of this list are written
                                         // to the output file
     fOutputList->SetOwner(kTRUE);       // memory stuff: the list is owner of all objects it contains and will delete them
-                                        // if requested (dont worry about this now)
+                                       // if requested (dont worry about this now)
+    TH1::SetDefaultSumw2(kTRUE);
     // event-wise
     hEvtCount = new TH1I("evtCount","",20, 1, 21);
     hEvtCount->GetXaxis()->SetBinLabel(1,"All");
@@ -423,8 +436,8 @@ void AliAnalysisTaskMyTask::UserCreateOutputObjects()
    hEta[1] = new TH1D("hEtaAfterCut",  "", 200, -10., 10.);
    for (int i=0; i<2; ++i) fOutputList->Add(hEta[i]);
    for (int i=0; i<8; ++i){
-   hBeforePhi[i] = new TH2D(Form("hPhiBeforeCut_cent%i",i), "", 400, 0, 2*TMath::Pi(), 100, -3., 3.);
-   hAfterPhi[i]  = new TH2D(Form("hPhiAfterCut_cent%i",i), "", 400, 0, 2*TMath::Pi(), 100, -3., 3.);
+   hBeforePhi[i] = new TH2D(Form("hPhiBeforeCut_cent%i",i), "", 400, 0, 2*TMath::Pi(), 3, 0, 3);
+   hAfterPhi[i]  = new TH2D(Form("hPhiAfterCut_cent%i",i), "", 400, 0, 2*TMath::Pi(), 3, 0, 3);
    fOutputList->Add(hBeforePhi[i]);
    fOutputList->Add(hAfterPhi[i]);
    }
@@ -509,6 +522,13 @@ void AliAnalysisTaskMyTask::UserCreateOutputObjects()
     fOutputList->Add(arcPos2Plane[i]);
     arcNeg2Plane[i]         = new TH1D(Form("arcNeg2Plane_cent%i",i),"", 180, -1*TMath::Pi()-0.1, TMath::Pi()+0.1);
     fOutputList->Add(arcNeg2Plane[i]);
+    }
+     for (int i=0; i<8; ++i) 
+    {
+     negQ[i]       = new  TH2D(Form("negQ_cent%i",i),"",200,-1000,1000,200,-1000,1000);
+     fOutputList->Add(negQ[i]);
+     posQ[i]       = new  TH2D(Form("posQ_cent%i",i),"",200,-1000,1000,200,-1000,1000);
+     fOutputList->Add(posQ[i]);
     }
    
    //CME
@@ -620,7 +640,7 @@ void AliAnalysisTaskMyTask::UserExec(Option_t *)
   oldRunNum = runNum;
   }
   runNumBin = GetRunNumBin(runNum);
-  if (runNumBin<0) return;
+ // if (runNumBin<0) return;
   hRunNumBin->Fill(runNumBin);
   hEvtCount->Fill(3);
    
@@ -736,8 +756,15 @@ void AliAnalysisTaskMyTask::UserExec(Option_t *)
      double chi2   = track->Chi2perNDF();
 
    
-
-     hBeforePhi[centBin]->Fill(phi,eta);
+     int etaBin = -1;
+     if (eta>0.){
+      etaBin = 0;
+     } else if (eta<0.)
+     {
+      etaBin = 1;
+     }
+     hBeforePhi[centBin]->Fill(phi,etaBin);
+     hBeforePhi[centBin]->Fill(phi,2);
      hPt[0]->Fill(pt);
      hEta[0]->Fill(eta); 
      hNhits[0]->Fill(nhits);
@@ -764,7 +791,8 @@ void AliAnalysisTaskMyTask::UserExec(Option_t *)
       else weight *= wAcc;
         
     }
-     hAfterPhi[centBin]->Fill(phi, eta, weight);
+     hAfterPhi[centBin]->Fill(phi, etaBin, weight);
+     hAfterPhi[centBin]->Fill(phi, 2, weight);
      hPt[1]->Fill(pt,weight); 
      hEta[1]->Fill(eta);
      hNhits[1]->Fill(nhits);
@@ -790,41 +818,43 @@ void AliAnalysisTaskMyTask::UserExec(Option_t *)
       }
 
    }
-
+   //Fill Q
+   negQ[centBin]->Fill(sumSin2Neg,sumCos2Neg);
+   posQ[centBin]->Fill(sumSin2Pos,sumCos2Pos);
 
    //arcPlane
-  double arcpsi2Pos = 0.5*TMath::ATan2(sumSin2Pos,sumCos2Pos);
-  double arcpsi2Neg = 0.5*TMath::ATan2(sumSin2Neg,sumCos2Neg);
-  arcPos2Plane[centBin]->Fill(arcpsi2Pos);
-  arcNeg2Plane[centBin]->Fill(arcpsi2Neg);
-   //TPC Plane
-  TVector2 Q2TPCPos;
-  Q2TPCPos.Set(sumCos2Pos,sumSin2Pos);
-  double psi2Pos = Q2TPCPos.Phi()/2.;
-  pos2Plane[centBin]->Fill(psi2Pos);
-  TVector2 Q2TPCNeg;
-  Q2TPCNeg.Set(sumCos2Neg,sumSin2Neg);
-  double psi2Neg = Q2TPCNeg.Phi()/2.;
-  neg2Plane[centBin]->Fill(psi2Neg);
-
-  TVector2 Q3TPCPos;
-  Q3TPCPos.Set(sumCos3Pos,sumSin3Pos);
-  double psi3Pos = Q3TPCPos.Phi()/3.;
-  pos3Plane[centBin]->Fill(psi3Pos);
-  TVector2 Q3TPCNeg;
-  Q3TPCNeg.Set(sumCos3Neg,sumSin3Neg);
-  double psi3Neg = Q3TPCNeg.Phi()/3.;
-  neg3Plane[centBin]->Fill(psi3Neg);
-  hEvtCount->Fill(17);
+   double arcpsi2Pos = 0.5*TMath::ATan2(sumSin2Pos,sumCos2Pos);
+   double arcpsi2Neg = 0.5*TMath::ATan2(sumSin2Neg,sumCos2Neg);
+   arcPos2Plane[centBin]->Fill(arcpsi2Pos);
+   arcNeg2Plane[centBin]->Fill(arcpsi2Neg);
+    //TPC Plane
+   TVector2 Q2TPCPos;
+   Q2TPCPos.Set(sumCos2Pos,sumSin2Pos);
+   double psi2Pos = Q2TPCPos.Phi()/2.;
+   pos2Plane[centBin]->Fill(psi2Pos);
+   TVector2 Q2TPCNeg;
+   Q2TPCNeg.Set(sumCos2Neg,sumSin2Neg);
+   double psi2Neg = Q2TPCNeg.Phi()/2.;
+   neg2Plane[centBin]->Fill(psi2Neg);
+   
+   TVector2 Q3TPCPos;
+   Q3TPCPos.Set(sumCos3Pos,sumSin3Pos);
+   double psi3Pos = Q3TPCPos.Phi()/3.;
+   pos3Plane[centBin]->Fill(psi3Pos);
+   TVector2 Q3TPCNeg;
+   Q3TPCNeg.Set(sumCos3Neg,sumSin3Neg);
+   double psi3Neg = Q3TPCNeg.Phi()/3.;
+   neg3Plane[centBin]->Fill(psi3Neg);
+   hEvtCount->Fill(17);
 
    Res2Square[centBin]->Fill(0.5,cos(2*(psi2Pos-psi2Neg)));
    Res3Square[centBin]->Fill(0.5,cos(3*(psi3Pos-psi3Neg)));
 
-  vector<int> vecCharge_sf;
-  vecCharge_sf.assign(vecCharge.begin(),vecCharge.end());
-  unsigned seed = std::chrono::system_clock::now ().time_since_epoch ().count ();  
-  std::shuffle (vecCharge_sf.begin(), vecCharge_sf.end(), std::default_random_engine (seed)); 
-  //random_shuffle(vecCharge_sf.begin(), vecCharge_sf.end());
+   vector<int> vecCharge_sf;
+   vecCharge_sf.assign(vecCharge.begin(),vecCharge.end());
+   unsigned seed = std::chrono::system_clock::now ().time_since_epoch ().count ();  
+   std::shuffle (vecCharge_sf.begin(), vecCharge_sf.end(), std::default_random_engine (seed)); 
+   //random_shuffle(vecCharge_sf.begin(), vecCharge_sf.end());
  
 
   //Sin
